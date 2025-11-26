@@ -75,6 +75,9 @@ function App() {
     }
   }, [needRefresh, updateServiceWorker]);
 
+  // Check if we're in development mode
+  const isDev = import.meta.env.DEV;
+
   return (
     <div className="app">
       <StatusBanner />
@@ -87,6 +90,41 @@ function App() {
             caching, and local storage
           </p>
         </header>
+
+        {isDev && (
+          <div style={{
+            padding: '20px',
+            marginBottom: '20px',
+            backgroundColor: '#fff3cd',
+            border: '2px solid #ffc107',
+            borderRadius: '8px',
+            color: '#856404'
+          }}>
+            <h3 style={{ marginBottom: '10px', color: '#856404' }}>
+              ⚠️ Development Mode Detected
+            </h3>
+            <p style={{ marginBottom: '10px', lineHeight: '1.6' }}>
+              <strong>PWA features are disabled in development mode.</strong> The service worker,
+              offline caching, and install prompt will NOT work with <code>npm run dev</code>.
+            </p>
+            <p style={{ fontWeight: 'bold', fontSize: '16px' }}>
+              To test PWA features, run:
+            </p>
+            <pre style={{
+              backgroundColor: '#333',
+              color: '#0f0',
+              padding: '15px',
+              borderRadius: '4px',
+              marginTop: '10px',
+              overflow: 'auto'
+            }}>
+              npm run build{'\n'}npm run preview
+            </pre>
+            <p style={{ marginTop: '10px', fontSize: '14px' }}>
+              Then open <code>http://localhost:4173</code> to see the fully functional PWA.
+            </p>
+          </div>
+        )}
 
         <div className="info-box">
           <h3>🎯 What This Demo Shows</h3>

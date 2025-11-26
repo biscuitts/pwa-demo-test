@@ -7,8 +7,9 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
+      registerType: 'prompt',
+      includeAssets: ['*.png', '*.svg', '*.ico', 'data/*.json'],
+
       manifest: {
         name: 'PWA Demo App',
         short_name: 'PWA Demo',
@@ -37,18 +38,27 @@ export default defineConfig({
           }
         ]
       },
+
       workbox: {
-        // Workbox options for service worker generation
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,json}'],
+        globPatterns: ['**/*.{js,css,html,png,svg,ico,json}'],
+
+        // Clean up old caches
+        cleanupOutdatedCaches: true,
+
+        // Important: This tells Workbox to return index.html for navigation requests
+        navigateFallback: '/index.html',
+        navigateFallbackDenylist: [/^\/api/],
+
         runtimeCaching: [
+          // Cache API data
           {
-            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
+            urlPattern: /\/data\/.*\.json$/,
             handler: 'CacheFirst',
             options: {
-              cacheName: 'google-fonts-cache',
+              cacheName: 'api-cache',
               expiration: {
                 maxEntries: 10,
-                maxAgeSeconds: 60 * 60 * 24 * 365 // 1 year
+                maxAgeSeconds: 60 * 60 * 24 * 7 // 7 days
               },
               cacheableResponse: {
                 statuses: [0, 200]
@@ -57,9 +67,10 @@ export default defineConfig({
           }
         ]
       },
+
+      // Disable in dev mode - PWA features only work properly in production
       devOptions: {
-        enabled: true, // Enable PWA in development mode
-        type: 'module'
+        enabled: false
       }
     })
   ]
