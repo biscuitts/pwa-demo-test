@@ -4,6 +4,7 @@ import { InstallButton } from './components/InstallButton';
 import { NotesManager } from './components/NotesManager';
 import { BackgroundSync } from './components/BackgroundSync';
 import { FetchData } from './components/FetchData';
+import { useRegisterSW } from 'virtual:pwa-register/react';
 import './App.css';
 
 /**
@@ -26,50 +27,38 @@ import './App.css';
  * ✅ Online/offline reactivity
  */
 function App() {
-  useEffect(() => {
-    // Register service worker
-    if ('serviceWorker' in navigator) {
-      console.log('[App] Service Worker supported, attempting registration...');
+  // Use vite-plugin-pwa's automatic service worker registration
+  const {
+    needRefresh: [needRefresh],
+    updateServiceWorker,
+  } = useRegisterSW({
+    onRegistered(registration) {
+      console.log('[App] ✅ Service Worker registered successfully!');
+      console.log('[App] Scope:', registration?.scope);
+      console.log('[App] Registration:', registration);
 
-      window.addEventListener('load', async () => {
-        try {
-          // Register the Workbox-generated service worker from vite-plugin-pwa
-          const registration = await navigator.serviceWorker.register('/sw.js', {
-            scope: '/',
-          });
-
-          console.log('[App] ✅ Service Worker registered successfully!');
-          console.log('[App] Scope:', registration.scope);
-          console.log('[App] Registration:', registration);
-
-          // Log installation state
-          if (registration.installing) {
-            console.log('[App] Service Worker state: INSTALLING');
-          } else if (registration.waiting) {
-            console.log('[App] Service Worker state: WAITING');
-          } else if (registration.active) {
-            console.log('[App] Service Worker state: ACTIVE');
-          }
-
-          // Listen for service worker updates
-          registration.addEventListener('updatefound', () => {
-            const newWorker = registration.installing;
-            console.log('[App] Service Worker update found!');
-
-            if (newWorker) {
-              newWorker.addEventListener('statechange', () => {
-                console.log('[App] Service Worker state changed to:', newWorker.state);
-
-                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                  console.log('[App] New service worker available! Refresh to update.');
-                }
-              });
-            }
-          });
-
-        } catch (error) {
-          console.error('[App] ❌ Service Worker registration failed:', error);
+      if (registration) {
+        if (registration.installing) {
+          console.log('[App] Service Worker state: INSTALLING');
+        } else if (registration.waiting) {
+          console.log('[App] Service Worker state: WAITING');
+        } else if (registration.active) {
+          console.log('[App] Service Worker state: ACTIVE');
         }
+      }
+    },
+    onRegisterError(error) {
+      console.error('[App] ❌ Service Worker registration failed:', error);
+    },
+  });
+
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      console.log('[App] Service Worker supported');
+
+      // Listen for service worker controller changes
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        console.log('[App] Service Worker controller changed - new SW is active');
       });
     } else {
       console.warn('[App] Service Worker not supported in this browser');
@@ -80,7 +69,11 @@ function App() {
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
     console.log('[App] Running as installed PWA:', isStandalone);
 
-  }, []);
+    // If there's a service worker update available, log it
+    if (needRefresh) {
+      console.log('[App] New service worker available! Call updateServiceWorker() to update.');
+    }
+  }, [needRefresh, updateServiceWorker]);
 
   return (
     <div className="app">
