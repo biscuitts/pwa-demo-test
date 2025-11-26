@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PWA Installation Debugger</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background: #1e1e1e;
+            color: #d4d4d4;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 15px;
+            background: #2d2d2d;
+            border-radius: 5px;
+        }
+        .pass { color: #4ec9b0; }
+        .fail { color: #f48771; }
+        .warn { color: #dcdcaa; }
+        h2 { color: #569cd6; }
+        code { background: #1e1e1e; padding: 2px 5px; }
+        button {
+            background: #0e639c;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            border-radius: 3px;
+            margin: 5px;
+        }
+        button:hover {
+            background: #1177bb;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 PWA Installation Debugger</h1>
+    <div id="results"></div>
+
+    <script>
+        const results = document.getElementById('results');
+
+        function addSection(title, content, status) {
+            const section = document.createElement('div');
+            section.className = 'section';
+            section.innerHTML = `<h2>${title}</h2>${content}`;
+            results.appendChild(section);
+        }
+
+        function check(condition, passMsg, failMsg) {
+            if (condition) {
+                return `<div class="pass">✓ ${passMsg}</div>`;
+            } else {
+                return `<div class="fail">✗ ${failMsg}</div>`;
+            }
+        }
+
+        async function runDiagnostics() {
+            results.innerHTML = '';
+
+            // Check 1: Service Worker Support
+            addSection('1. Service Worker Support',
+                check(
+                    'serviceWorker' in navigator,
+                    'Service Worker API is supported',
+                    'Service Worker API is NOT supported (browser too old?)'
+                )
+            );
+
+            // Check 2: HTTPS/Localhost
+            const isSecure = location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+            addSection('2. Secure Context',
+                check(
+                    isSecure,
+                    `Running on secure context: ${location.protocol}//${location.hostname}`,
+                    `NOT secure! PWAs require HTTPS or localhost. Currently: ${location.protocol}//${location.hostname}`
+                )
+            );
+
+            // Check 3: Service Worker Registration
+            if ('serviceWorker' in navigator) {
+                try {
+                    const registrations = await navigator.serviceWorker.getRegistrations();
+                    const swReg = registrations.length > 0 ? registrations[0] : null;
+
+                    let swStatus = '';
+                    if (swReg) {
+                        const state = swReg.active ? swReg.active.state : 'no active worker';
+                        swStatus = check(
+                            swReg.active && swReg.active.state === 'activated',
+                            `Service Worker is registered and active (${state})`,
+                            `Service Worker registered but not active (${state})`
+                        );
+                        swStatus += `<div>Scope: <code>${swReg.scope}</code></div>`;
+                    } else {
+                        swStatus = check(false, '', 'No Service Worker registered yet!');
+                    }
+                    addSection('3. Service Worker Status', swStatus);
+                } catch (e) {
+                    addSection('3. Service Worker Status',
+                        `<div class="fail">Error checking SW: ${e.message}</div>`
+                    );
+                }
+            }
+
+            // Check 4: Manifest
+            try {
+                const manifestLink = document.querySelector('link[rel="manifest"]');
+                let manifestStatus = check(
+                    manifestLink !== null,
+                    `Manifest link found: <code>${manifestLink?.href}</code>`,
+                    'No manifest link in HTML!'
+                );
+
+                if (manifestLink) {
+                    try {
+                        const response = await fetch(manifestLink.href);
+                        const manifest = await response.json();
+                        manifestStatus += check(
+                            manifest.name && manifest.icons && manifest.icons.length > 0,
+                            `Manifest loaded successfully. Name: "${manifest.name}", Icons: ${manifest.icons.length}`,
+                            'Manifest loaded but missing required fields'
+                        );
+                        manifestStatus += `<pre>${JSON.stringify(manifest, null, 2)}</pre>`;
+                    } catch (e) {
+                        manifestStatus += `<div class="fail">Error loading manifest: ${e.message}</div>`;
+                    }
+                }
+                addSection('4. Web App Manifest', manifestStatus);
+            } catch (e) {
+                addSection('4. Web App Manifest',
+                    `<div class="fail">Error checking manifest: ${e.message}</div>`
+                );
+            }
+
+            // Check 5: Display Mode
+            const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+            addSection('5. Display Mode',
+                check(
+                    !isStandalone,
+                    'Running in browser (not installed)',
+                    'Already running as installed app! (This is why install prompt won\'t show)'
+                )
+            );
+
+            // Check 6: beforeinstallprompt
+            let installPromptInfo = '<div class="warn">⏳ Waiting for beforeinstallprompt event...</div>';
+            installPromptInfo += '<div>This event may take a few seconds or may not fire if:</div>';
+            installPromptInfo += '<ul>';
+            installPromptInfo += '<li>App is already installed</li>';
+            installPromptInfo += '<li>User previously dismissed the install prompt</li>';
+            installPromptInfo += '<li>Browser doesn\'t think user is "engaged" enough</li>';
+            installPromptInfo += '<li>Other PWA criteria not met</li>';
+            installPromptInfo += '</ul>';
+
+            window.addEventListener('beforeinstallprompt', (e) => {
+                e.preventDefault();
+                document.getElementById('install-check').innerHTML =
+                    '<div class="pass">✓ beforeinstallprompt event fired! App is installable!</div>' +
+                    '<button onclick="installApp()">Install Now</button>';
+                window.deferredPrompt = e;
+            });
+
+            installPromptInfo += '<div id="install-check"></div>';
+            addSection('6. Installation Prompt', installPromptInfo);
+
+            // Check 7: Network Status
+            addSection('7. Network Status',
+                check(
+                    navigator.onLine,
+                    'Online',
+                    'Offline'
+                )
+            );
+
+            // Check 8: Cache Storage
+            if ('caches' in window) {
+                try {
+                    const cacheNames = await caches.keys();
+                    let cacheInfo = check(
+                        cacheNames.length > 0,
+                        `Found ${cacheNames.length} cache(s)`,
+                        'No caches found yet'
+                    );
+                    if (cacheNames.length > 0) {
+                        cacheInfo += '<ul>';
+                        for (const name of cacheNames) {
+                            const cache = await caches.open(name);
+                            const keys = await cache.keys();
+                            cacheInfo += `<li><code>${name}</code>: ${keys.length} entries</li>`;
+                        }
+                        cacheInfo += '</ul>';
+                    }
+                    addSection('8. Cache Storage', cacheInfo);
+                } catch (e) {
+                    addSection('8. Cache Storage',
+                        `<div class="fail">Error checking caches: ${e.message}</div>`
+                    );
+                }
+            }
+
+            // Summary
+            let summary = '<h3>Common Issues:</h3>';
+            summary += '<ul>';
+            summary += '<li><strong>Not running production build?</strong> Run: <code>npm run build && npm run preview</code></li>';
+            summary += '<li><strong>Previously dismissed?</strong> Clear site data in DevTools → Application → Storage</li>';
+            summary += '<li><strong>Already installed?</strong> Check chrome://apps or uninstall first</li>';
+            summary += '<li><strong>Not engaged enough?</strong> Click around the app, wait 30 seconds</li>';
+            summary += '<li><strong>Wrong URL?</strong> Must be on localhost:4173 (preview), not localhost:5173 (dev)</li>';
+            summary += '</ul>';
+
+            summary += '<button onclick="location.reload()">🔄 Refresh Page</button>';
+            summary += '<button onclick="clearAllData()">🗑️ Clear All Data & Reload</button>';
+
+            addSection('Summary & Actions', summary);
+        }
+
+        async function clearAllData() {
+            if (confirm('This will clear all service workers, caches, and site data. Continue?')) {
+                // Unregister all service workers
+                const registrations = await navigator.serviceWorker.getRegistrations();
+                for (const reg of registrations) {
+                    await reg.unregister();
+                }
+
+                // Clear all caches
+                const cacheNames = await caches.keys();
+                for (const name of cacheNames) {
+                    await caches.delete(name);
+                }
+
+                // Clear IndexedDB
+                const databases = await indexedDB.databases();
+                for (const db of databases) {
+                    indexedDB.deleteDatabase(db.name);
+                }
+
+                alert('Data cleared! Reloading...');
+                location.reload();
+            }
+        }
+
+        async function installApp() {
+            if (window.deferredPrompt) {
+                window.deferredPrompt.prompt();
+                const { outcome } = await window.deferredPrompt.userChoice;
+                document.getElementById('install-check').innerHTML +=
+                    `<div>User choice: ${outcome}</div>`;
+                window.deferredPrompt = null;
+            }
+        }
+
+        // Run diagnostics on load
+        runDiagnostics();
+    </script>
+</body>
+</html>
