@@ -1,0 +1,11 @@
+{
+  "message": "Hello from cached data!",
+  "timestamp": "2025-11-26T00:00:00Z",
+  "features": [
+    "Offline caching",
+    "Service workers",
+    "IndexedDB storage",
+    "Background sync"
+  ],
+  "status": "success"
+}
